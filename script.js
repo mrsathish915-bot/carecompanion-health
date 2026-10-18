@@ -1,511 +1,484 @@
 
+"use strict";
+
 const $ = (id) => document.getElementById(id);
 
-const medicineForm = $("medicineForm");
-const medicineList = $("medicineList");
-const emptyMedicines = $("emptyMedicines");
-const showMedicineForm = $("showMedicineForm");
+const MEDICINES_KEY = "careCompanionMedicines";
+const READINGS_KEY = "careCompanionReadings";
+const HISTORY_KEY = "careCompanionDoseHistory";
 
-const STORAGE_KEYS = {
-    medicines: "carecompanion_medicines_v1",
-    readings: "carecompanion_readings_v1",
-    doseHistory: "carecompanion_dose_history_v1"
-};
-
-function loadData(key, fallback = []) {
-    try {
-        const saved = localStorage.getItem(key);
-        const parsed = saved ? JSON.parse(saved) : fallback;
-        return Array.isArray(parsed) ? parsed : fallback;
-    } catch {
-        return fallback;
-    }
-}
-
-function saveData(key, value) {
-    try {
-        localStorage.setItem(key, JSON.stringify(value));
-        return true;
-    } catch {
-        alert("Your browser could not save this information. Check browser storage settings.");
-        return false;
-    }
-}
-
-let medicines = loadData(STORAGE_KEYS.medicines);
-let readings = loadData(STORAGE_KEYS.readings);
-let doseHistory = loadData(STORAGE_KEYS.doseHistory);
-
-let activeReminderId = null;
-let snoozedUntil = {};
-let audioContext = null;
-let audioEnabled = false;
+let medicines = loadData(MEDICINES_KEY, []);
+let readings = loadData(READINGS_KEY, []);
+let doseHistory = loadData(HISTORY_KEY, []);
+let activeReminder = null;
 const alertedOccurrences = new Set();
+let snoozeTimer = null;
 
-function todayKey() {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+function loadData(key, fallback) {
+  try {
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveData() {
+  localStorage.setItem(MEDICINES_KEY, JSON.stringify(medicines));
+  localStorage.setItem(READINGS_KEY, JSON.stringify(readings));
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(doseHistory));
+}
+
+function makeId() {
+  return window.crypto?.randomUUID
+    ? window.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function escapeHTML(value) {
-    return String(value).replace(/[&<>"']/g, char => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-    })[char]);
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function formatTime(time) {
-    if (!/^\d{2}:\d{2}$/.test(time || "")) return "--:--";
+  if (!time) return "Not set";
 
-    const [hours, minutes] = time.split(":").map(Number);
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
+  const [hours, minutes] = time.split(":").map(Number);
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
 
-    return date.toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit"
-    });
+  return date.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit"
+  });
 }
 
-function formatDateTime(timestamp) {
-    return new Date(timestamp).toLocaleString([], {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit"
-    });
+function doseKey(medicine) {
+  return `${todayKey()}_${medicine.id}_${medicine.time}`;
 }
 
-function doseTaken(medicineId, date = todayKey()) {
-    return doseHistory.some(entry =>
-        entry.medicineId === medicineId && entry.date === date
+function wasTakenToday(medicine) {
+  return doseHistory.includes(doseKey(medicine));
+}
+
+function init() {
+  const form = $("medicineForm");
+
+  if (form && !$("medicineId")) {
+    const hidden = document.createElement("input");
+    hidden.type = "hidden";
+    hidden.id = "medicineId";
+    hidden.value = "";
+    form.prepend(hidden);
+  }
+
+  if ($("todayDate")) {
+    $("todayDate").textContent = new Date().toLocaleDateString(
+      undefined,
+      { weekday: "long", year: "numeric", month: "long", day: "numeric" }
     );
+  }
+
+  $("showMedicineForm")?.addEventListener("click", () => {
+    resetMedicineForm();
+    if ($("medicineForm")) $("medicineForm").hidden = false;
+  });
+
+  $("cancelMedicineForm")?.addEventListener("click", () => {
+    resetMedicineForm();
+    if ($("medicineForm")) $("medicineForm").hidden = true;
+  });
+
+  $("medicineForm")?.addEventListener("submit", saveMedicine);
+  $("healthForm")?.addEventListener("submit", saveReading);
+
+  $("reminderTaken")?.addEventListener("click", markReminderTaken);
+  $("reminderDismiss")?.addEventListener("click", closeReminder);
+  $("reminderSnooze")?.addEventListener("click", snoozeReminder);
+
+  renderMedicines();
+  renderReadings();
+  updateDashboard();
+
+  checkReminders();
+  window.setInterval(checkReminders, 15000);
 }
 
-function updateDoseHistory(medicineId, taken) {
-    const date = todayKey();
+function resetMedicineForm() {
+  $("medicineForm")?.reset();
 
-    doseHistory = doseHistory.filter(entry =>
-        !(entry.medicineId === medicineId && entry.date === date)
-    );
+  if ($("medicineId")) $("medicineId").value = "";
 
-    if (taken) {
-        doseHistory.push({
-            medicineId,
-            date,
-            recordedAt: new Date().toISOString()
-        });
+  const button = $("medicineForm")?.querySelector('[type="submit"]');
+  if (button) button.textContent = "Save Medicine";
+}
+
+function saveMedicine(event) {
+  event.preventDefault();
+
+  const name = $("medicineName")?.value.trim();
+  const type = $("medicineType")?.value || "Medicine";
+  const instructions = $("medicineInstructions")?.value.trim() || "";
+  const time = $("medicineTime")?.value;
+  const id = $("medicineId")?.value;
+
+  if (!name || !time) {
+    alert("Please enter the medicine name and reminder time.");
+    return;
+  }
+
+  if (id) {
+    const medicine = medicines.find((item) => item.id === id);
+
+    if (medicine) {
+      medicine.name = name;
+      medicine.type = type;
+      medicine.instructions = instructions;
+      medicine.time = time;
     }
-
-    saveData(STORAGE_KEYS.doseHistory, doseHistory);
-}
-
-function renderDashboard() {
-    const now = new Date();
-
-    $("todayDate").textContent = now.toLocaleDateString([], {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-        year: "numeric"
+  } else {
+    medicines.push({
+      id: makeId(),
+      name,
+      type,
+      instructions,
+      time
     });
+  }
 
-    $("totalMedicines").textContent = medicines.length;
+  saveData();
+  resetMedicineForm();
 
-    const takenCount = medicines.filter(medicine =>
-        doseTaken(medicine.id)
-    ).length;
+  if ($("medicineForm")) $("medicineForm").hidden = true;
 
-    $("takenMedicines").textContent = takenCount;
-
-    const upcoming = medicines
-        .filter(medicine =>
-            !doseTaken(medicine.id) &&
-            medicine.time >= now.toTimeString().slice(0, 5)
-        )
-        .sort((a, b) => a.time.localeCompare(b.time));
-
-    if (upcoming.length) {
-        $("nextReminder").textContent = formatTime(upcoming[0].time);
-        $("nextMedicine").textContent = upcoming[0].name;
-    } else {
-        $("nextReminder").textContent = "--:--";
-        $("nextMedicine").textContent =
-            medicines.length ? "No more pending times today" : "Add your first reminder";
-    }
+  renderMedicines();
+  updateDashboard();
 }
 
 function renderMedicines() {
-    medicineList.innerHTML = "";
-    emptyMedicines.hidden = medicines.length > 0;
+  const list = $("medicineList");
+  const empty = $("emptyMedicines");
 
-    medicines.sort((a, b) => a.time.localeCompare(b.time));
+  if (!list) return;
 
-    medicines.forEach(medicine => {
-        const taken = doseTaken(medicine.id);
-        const item = document.createElement("article");
+  if (medicines.length === 0) {
+    list.innerHTML = "";
+    if (empty) empty.hidden = false;
+    return;
+  }
 
-        item.className = `medicine-item${taken ? " is-taken" : ""}`;
+  if (empty) empty.hidden = true;
 
-        const symbol = medicine.type === "Syrup" ? "🧴" :
-            medicine.type === "Capsule" ? "💊" :
-            medicine.type === "Tablet" ? "💊" : "🩺";
+  list.innerHTML = [...medicines]
+    .sort((a, b) => a.time.localeCompare(b.time))
+    .map((medicine) => {
+      const taken = wasTakenToday(medicine);
 
-        item.innerHTML = `
-            <div class="medicine-symbol" aria-hidden="true">${symbol}</div>
-            <div class="medicine-details">
-                <h3>${escapeHTML(medicine.name)}</h3>
-                <p>${escapeHTML(medicine.type)}</p>
-                ${medicine.instructions
-                    ? `<p>${escapeHTML(medicine.instructions)}</p>`
-                    : ""}
-                <p class="medicine-time">⏰ ${formatTime(medicine.time)}</p>
-                <div class="medicine-actions">
-                    <button type="button" class="taken-button"
-                        data-action="taken" data-id="${escapeHTML(medicine.id)}"
-                        aria-pressed="${taken}">
-                        ${taken ? "✓ Taken today" : "Mark as taken"}
-                    </button>
-                    <button type="button" data-action="edit"
-                        data-id="${escapeHTML(medicine.id)}">Edit</button>
-                    <button type="button" class="delete-button"
-                        data-action="delete" data-id="${escapeHTML(medicine.id)}">
-                        Delete
-                    </button>
-                </div>
-            </div>
-        `;
+      return `
+        <article class="medicine-item ${taken ? "is-taken" : ""}">
+          <div class="medicine-info">
+            <h3>${escapeHTML(medicine.name)}</h3>
+            <p>${escapeHTML(medicine.type)}</p>
+            <p><strong>Reminder:</strong> ${escapeHTML(formatTime(medicine.time))}</p>
+            <p>${escapeHTML(medicine.instructions)}</p>
+            <p>${taken ? "Marked as taken today" : "Not marked as taken today"}</p>
+          </div>
+          <div class="medicine-actions">
+            <button type="button" data-action="taken" data-id="${escapeHTML(medicine.id)}">
+              ${taken ? "Undo Taken" : "Mark Taken"}
+            </button>
+            <button type="button" data-action="edit" data-id="${escapeHTML(medicine.id)}">Edit</button>
+            <button type="button" data-action="delete" data-id="${escapeHTML(medicine.id)}">Delete</button>
+          </div>
+        </article>
+      `;
+    }).join("");
 
-        medicineList.appendChild(item);
+  list.querySelectorAll("[data-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const medicine = medicines.find(
+        (item) => item.id === button.dataset.id
+      );
+
+      if (!medicine) return;
+
+      if (button.dataset.action === "taken") toggleTaken(medicine);
+      if (button.dataset.action === "edit") editMedicine(medicine);
+      if (button.dataset.action === "delete") deleteMedicine(medicine);
     });
-
-    renderDashboard();
+  });
 }
 
-function openMedicineForm() {
-    medicineForm.hidden = false;
-    showMedicineForm.hidden = true;
-    $("medicineName").focus();
+function toggleTaken(medicine) {
+  const key = doseKey(medicine);
+
+  if (doseHistory.includes(key)) {
+    doseHistory = doseHistory.filter((item) => item !== key);
+  } else {
+    doseHistory.push(key);
+  }
+
+  saveData();
+  renderMedicines();
+  updateDashboard();
 }
 
-function closeMedicineForm() {
-    medicineForm.reset();
-    $("medicineId").value = "";
-    medicineForm.hidden = true;
-    showMedicineForm.hidden = false;
+function editMedicine(medicine) {
+  $("medicineId").value = medicine.id;
+  $("medicineName").value = medicine.name;
+  $("medicineType").value = medicine.type;
+  $("medicineInstructions").value = medicine.instructions || "";
+  $("medicineTime").value = medicine.time;
+
+  if ($("medicineForm")) $("medicineForm").hidden = false;
+
+  const button = $("medicineForm")?.querySelector('[type="submit"]');
+  if (button) button.textContent = "Update Medicine";
+
+  $("medicineName")?.focus();
 }
 
-showMedicineForm.addEventListener("click", openMedicineForm);
+function deleteMedicine(medicine) {
+  if (!confirm(`Delete ${medicine.name}?`)) return;
 
-$("cancelMedicineForm").addEventListener("click", closeMedicineForm);
+  medicines = medicines.filter((item) => item.id !== medicine.id);
+  doseHistory = doseHistory.filter(
+    (key) => !key.includes(`_${medicine.id}_`)
+  );
 
-medicineForm.addEventListener("submit", event => {
-    event.preventDefault();
+  if (activeReminder?.medicineId === medicine.id) closeReminder();
 
-    const id = $("medicineId")?.value;
-    const name = $("medicineName").value.trim();
-    const type = $("medicineType").value;
-    const instructions = $("medicineInstructions").value.trim();
-    const time = $("medicineTime").value;
+  saveData();
+  renderMedicines();
+  updateDashboard();
+}
 
-    if (!name || !time) {
-        alert("Please enter a medicine name and reminder time.");
-        return;
-    }
+function saveReading(event) {
+  event.preventDefault();
 
-    const existing = medicines.find(medicine => medicine.id === id);
+  const type = $("healthType")?.value;
+  const value = $("healthValue")?.value.trim();
 
-    if (existing) {
-        existing.name = name;
-        existing.type = type;
-        existing.instructions = instructions;
-        existing.time = time;
-    } else {
-        medicines.push({
-            id: crypto.randomUUID
-                ? crypto.randomUUID()
-                : `${Date.now()}-${Math.random()}`,
-            name,
-            type,
-            instructions,
-            time
-        });
-    }
+  if (!type || !value) {
+    alert("Please enter a health reading.");
+    return;
+  }
 
-    if (saveData(STORAGE_KEYS.medicines, medicines)) {
-        closeMedicineForm();
-        renderMedicines();
-    }
-});
+  readings.push({
+    id: makeId(),
+    type,
+    value,
+    date: new Date().toLocaleString()
+  });
 
-medicineList.addEventListener("click", event => {
-    const button = event.target.closest("button[data-action]");
-    if (!button) return;
-
-    const medicine = medicines.find(item => item.id === button.dataset.id);
-    if (!medicine) return;
-
-    const action = button.dataset.action;
-
-    if (action === "taken") {
-        updateDoseHistory(medicine.id, !doseTaken(medicine.id));
-        renderMedicines();
-    }
-
-    if (action === "delete") {
-        if (!confirm(`Delete the reminder for ${medicine.name}?`)) return;
-
-        medicines = medicines.filter(item => item.id !== medicine.id);
-        doseHistory = doseHistory.filter(entry =>
-            entry.medicineId !== medicine.id
-        );
-
-        saveData(STORAGE_KEYS.medicines, medicines);
-        saveData(STORAGE_KEYS.doseHistory, doseHistory);
-        renderMedicines();
-    }
-
-    if (action === "edit") {
-        if (!$("medicineId")) {
-            const hiddenInput = document.createElement("input");
-            hiddenInput.type = "hidden";
-            hiddenInput.id = "medicineId";
-            medicineForm.prepend(hiddenInput);
-        }
-
-        $("medicineId").value = medicine.id;
-        $("medicineName").value = medicine.name;
-        $("medicineType").value = medicine.type;
-        $("medicineInstructions").value = medicine.instructions || "";
-        $("medicineTime").value = medicine.time;
-
-        openMedicineForm();
-    }
-});
-
-/* Health readings */
+  saveData();
+  renderReadings();
+  $("healthForm")?.reset();
+}
 
 function renderReadings() {
-    const container = $("healthReadings");
+  const container = $("healthReadings");
+  if (!container) return;
 
-    if (!readings.length) {
-        container.innerHTML =
-            '<p class="muted-text">No readings recorded yet.</p>';
-        return;
-    }
+  if (!readings.length) {
+    container.innerHTML = "<p>No health readings recorded yet.</p>";
+    return;
+  }
 
-    container.innerHTML = "";
+  container.innerHTML = [...readings].reverse().map((reading) => `
+    <article class="medicine-item">
+      <div class="medicine-info">
+        <h3>${escapeHTML(reading.type)}</h3>
+        <p>${escapeHTML(reading.value)}</p>
+        <p>${escapeHTML(reading.date)}</p>
+      </div>
+      <div class="medicine-actions">
+        <button type="button" data-reading-id="${escapeHTML(reading.id)}">Delete</button>
+      </div>
+    </article>
+  `).join("");
 
-    [...readings].reverse().slice(0, 10).forEach(reading => {
-        const item = document.createElement("article");
-        item.className = "reading-item";
+  container.querySelectorAll("[data-reading-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!confirm("Delete this reading?")) return;
 
-        item.innerHTML = `
-            <strong>${escapeHTML(reading.type)}: ${escapeHTML(reading.value)}</strong>
-            <p>${formatDateTime(reading.timestamp)}</p>
-            <button type="button" class="secondary-button"
-                data-delete-reading="${escapeHTML(reading.id)}">
-                Delete reading
-            </button>
-        `;
+      readings = readings.filter(
+        (reading) => reading.id !== button.dataset.readingId
+      );
 
-        container.appendChild(item);
+      saveData();
+      renderReadings();
     });
+  });
 }
 
-$("healthForm").addEventListener("submit", event => {
-    event.preventDefault();
+function updateDashboard() {
+  if ($("totalMedicines")) {
+    $("totalMedicines").textContent = medicines.length;
+  }
 
-    const type = $("healthType").value;
-    const value = $("healthValue").value.trim();
+  if ($("takenMedicines")) {
+    $("takenMedicines").textContent =
+      medicines.filter(wasTakenToday).length;
+  }
 
-    if (!value) {
-        alert("Please enter a reading.");
-        return;
-    }
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    if (value.length > 30) {
-        alert("Please enter a shorter reading.");
-        return;
-    }
+  const upcoming = medicines
+    .filter((medicine) => !wasTakenToday(medicine))
+    .map((medicine) => ({
+      medicine,
+      minutes: Number(medicine.time.split(":")[0]) * 60 +
+        Number(medicine.time.split(":")[1])
+    }))
+    .filter((item) => item.minutes >= currentMinutes)
+    .sort((a, b) => a.minutes - b.minutes)[0];
 
-    readings.push({
-        id: `${Date.now()}-${Math.random()}`,
-        type,
-        value,
-        timestamp: new Date().toISOString()
-    });
+  if ($("nextReminder")) {
+    $("nextReminder").textContent = upcoming
+      ? formatTime(upcoming.medicine.time)
+      : "No upcoming reminders";
+  }
 
-    if (saveData(STORAGE_KEYS.readings, readings)) {
-        $("healthValue").value = "";
-        renderReadings();
-    }
-});
-
-$("healthReadings").addEventListener("click", event => {
-    const button = event.target.closest("[data-delete-reading]");
-    if (!button) return;
-
-    if (!confirm("Delete this health reading?")) return;
-
-    readings = readings.filter(reading =>
-        reading.id !== button.dataset.deleteReading
-    );
-
-    saveData(STORAGE_KEYS.readings, readings);
-    renderReadings();
-});
-
-/* Reminder alerts and optional sound */
-
-function enableReminderSound() {
-    const AudioContextClass = window.AudioContext ||
-        window.webkitAudioContext;
-
-    if (!AudioContextClass) {
-        alert("Sound alerts are not supported by this browser.");
-        return;
-    }
-
-    audioContext = audioContext || new AudioContextClass();
-
-    audioContext.resume().then(() => {
-        audioEnabled = true;
-        alert("Sound alerts enabled while this page is active.");
-    }).catch(() => {
-        alert("Could not enable sound. Check your browser permissions.");
-    });
-}
-
-function playAlertSound() {
-    if (!audioEnabled || !audioContext) return;
-
-    try {
-        const oscillator = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-
-        oscillator.type = "sine";
-        oscillator.frequency.value = 880;
-        gain.gain.value = 0.12;
-
-        oscillator.connect(gain);
-        gain.connect(audioContext.destination);
-
-        oscillator.start();
-
-        setTimeout(() => {
-            try {
-                oscillator.stop();
-                oscillator.disconnect();
-                gain.disconnect();
-            } catch {}
-        }, 500);
-    } catch {}
-}
-
-function openReminder(medicine, occurrenceKey) {
-    activeReminderId = medicine.id;
-    $("reminderTitle").textContent = "Medicine reminder";
-    $("reminderMessage").textContent =
-        `Your scheduled reminder is for ${medicine.name} (${medicine.type}) at ${formatTime(medicine.time)}. Follow your prescribed instructions.`;
-    $("reminderDialog").hidden = false;
-
-    alertedOccurrences.add(occurrenceKey);
-    playAlertSound();
-
-    if ("Notification" in window &&
-        Notification.permission === "granted") {
-        try {
-            new Notification("CareCompanion reminder", {
-                body: `Check your scheduled reminder for ${medicine.name}.`
-            });
-        } catch {}
-    }
+  if ($("nextMedicine")) {
+    $("nextMedicine").textContent = upcoming
+      ? upcoming.medicine.name
+      : "You're all caught up!";
+  }
 }
 
 function checkReminders() {
-    const now = new Date();
-    const date = todayKey();
-    const currentTime = now.toTimeString().slice(0, 5);
+  const now = new Date();
+  const currentTime =
+    `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
-    medicines.forEach(medicine => {
-        const occurrenceKey = `${date}-${medicine.id}-${medicine.time}`;
+  medicines.forEach((medicine) => {
+    if (medicine.time !== currentTime || wasTakenToday(medicine)) return;
 
-        if (medicine.time !== currentTime) return;
-        if (doseTaken(medicine.id, date)) return;
-        if (alertedOccurrences.has(occurrenceKey)) return;
+    const key = doseKey(medicine);
 
-        const snoozeTime = snoozedUntil[occurrenceKey];
+    if (alertedOccurrences.has(key)) return;
 
-        if (snoozeTime && Date.now() < snoozeTime) return;
+    alertedOccurrences.add(key);
+    openReminder(medicine, key);
+  });
+}
 
-        openReminder(medicine, occurrenceKey);
-    });
+function openReminder(medicine, key) {
+  activeReminder = {
+    medicineId: medicine.id,
+    key,
+    medicine
+  };
+
+  if ($("reminderTitle")) {
+    $("reminderTitle").textContent = "Time for Your Medicine";
+  }
+
+  if ($("reminderMessage")) {
+    $("reminderMessage").textContent =
+      `Reminder: ${medicine.name}. Please follow your healthcare professional's instructions.`;
+  }
+
+  const dialog = $("reminderDialog");
+
+  if (dialog?.showModal && !dialog.open) {
+    dialog.showModal();
+  } else if (!dialog) {
+    alert(`Medicine reminder: ${medicine.name}`);
+  }
+
+  playReminderSound();
+}
+
+function playReminderSound() {
+  try {
+    const AudioClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioClass) return;
+
+    const context = new AudioClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.frequency.value = 880;
+    gain.gain.value = 0.12;
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+
+    window.setTimeout(() => {
+      oscillator.stop();
+      context.close();
+    }, 500);
+  } catch (error) {
+    console.info("Browser did not allow reminder sound.");
+  }
+}
+
+function markReminderTaken() {
+  if (!activeReminder) {
+    closeReminder();
+    return;
+  }
+
+  const medicine = medicines.find(
+    (item) => item.id === activeReminder.medicineId
+  );
+
+  if (medicine) {
+    const key = doseKey(medicine);
+
+    if (!doseHistory.includes(key)) doseHistory.push(key);
+
+    saveData();
+    renderMedicines();
+    updateDashboard();
+  }
+
+  closeReminder();
+}
+
+function snoozeReminder() {
+  if (!activeReminder) return;
+
+  const reminder = activeReminder;
+  closeReminder();
+
+  if (snoozeTimer) clearTimeout(snoozeTimer);
+
+  snoozeTimer = window.setTimeout(() => {
+    const medicine = medicines.find(
+      (item) => item.id === reminder.medicineId
+    );
+
+    if (medicine && !wasTakenToday(medicine)) {
+      openReminder(medicine, reminder.key);
+    }
+  }, 5 * 60 * 1000);
 }
 
 function closeReminder() {
-    $("reminderDialog").hidden = true;
-    activeReminderId = null;
+  const dialog = $("reminderDialog");
+
+  if (dialog?.open) dialog.close();
+
+  activeReminder = null;
 }
 
-$("reminderTaken").addEventListener("click", () => {
-    if (activeReminderId) {
-        updateDoseHistory(activeReminderId, true);
-        renderMedicines();
-    }
-    closeReminder();
-});
-
-$("reminderDismiss").addEventListener("click", closeReminder);
-
-$("reminderSnooze").addEventListener("click", () => {
-    if (activeReminderId) {
-        const medicine = medicines.find(item => item.id === activeReminderId);
-
-        if (medicine) {
-            const key = `${todayKey()}-${medicine.id}-${medicine.time}`;
-            snoozedUntil[key] = Date.now() + 5 * 60 * 1000;
-
-            setTimeout(() => {
-                if (medicines.some(item => item.id === medicine.id) &&
-                    !doseTaken(medicine.id)) {
-                    openReminder(medicine, key);
-                }
-            }, 5 * 60 * 1000);
-        }
-    }
-
-    closeReminder();
-});
-
-/* Ask for notification permission only after a user action */
-
-const notificationButton = document.createElement("button");
-notificationButton.type = "button";
-notificationButton.className = "secondary-button";
-notificationButton.textContent = "Enable reminder sound";
-notificationButton.style.marginTop = "12px";
-
-notificationButton.addEventListener("click", async () => {
-    enableReminderSound();
-
-    if ("Notification" in window &&
-        Notification.permission === "default") {
-        try {
-            await Notification.requestPermission();
-        } catch {}
-    }
-});
-
-document.querySelector(".alert-banner > div").appendChild(notificationButton);
-
-/* Initialize dashboard */
-
-renderMedicines();
-renderReadings();
-
-checkReminders();
-setInterval(checkReminders, 15000);
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
