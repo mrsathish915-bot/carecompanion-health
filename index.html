@@ -1,317 +1,47 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#087f8c">
-  <meta name="description" content="CareCompanion helps older adults organize medicine reminders, health readings, and everyday wellness information.">
-  <title>CareCompanion | Elderly Health Assistant</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-  <script src="script.js" defer></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Care Companion</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-  <header class="topbar">
-    <a class="brand" href="#home" aria-label="CareCompanion home">
-      <span class="brand-icon">✚</span>
-      <span>
-        <strong>CareCompanion</strong>
-        <small>Everyday care, made easier</small>
-      </span>
-    </a>
+    <!-- Hidden audio element for the alarm sound -->
+    <audio id="alarmSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" loop></audio>
 
-    <a class="topbar-link" href="#health">My Health <span>♡</span></a>
-  </header>
-
-  <main class="container" id="home">
-    <section class="welcome-panel">
-      <div class="welcome-copy">
-        <span class="eyebrow">YOUR DAILY WELLNESS SPACE</span>
-        <h1>A healthier day<br>starts with <span>care.</span></h1>
-        <p>Keep track of your medicine schedule, record your health readings, and make time for yourself every day.</p>
-        <a class="primary-link" href="#medicines">View My Medicines <span>→</span></a>
-      </div>
-
-      <div class="welcome-art" aria-hidden="true">
-        <div class="art-circle">
-          <div class="art-heart">♡</div>
-          <div class="art-cross">✚</div>
-          <div class="art-pill">💊</div>
-        </div>
-        <div class="art-caption">A little care goes a long way</div>
-      </div>
-    </section>
-
-    <section class="date-row" aria-live="polite">
-      <div>
-        <span class="section-kicker">YOUR PERSONAL HEALTH DASHBOARD</span>
-        <h2>Good day! Take care of yourself.</h2>
-      </div>
-      <div class="date-chip">
-        <span aria-hidden="true">▦</span>
-        <span id="todayDate">Your daily overview</span>
-      </div>
-    </section>
-
-    <section class="summary-grid" aria-label="Daily health summary">
-      <article class="summary-card summary-teal">
-        <div class="summary-top">
-          <span class="summary-icon">💊</span>
-          <span class="summary-label">My Medicines</span>
-        </div>
-        <p class="summary-number" id="totalMedicines">0</p>
-        <p class="summary-description">Saved in your schedule</p>
-      </article>
-
-      <article class="summary-card summary-green">
-        <div class="summary-top">
-          <span class="summary-icon">✓</span>
-          <span class="summary-label">Marked as Taken</span>
-        </div>
-        <p class="summary-number" id="takenMedicines">0</p>
-        <p class="summary-description">For today's schedule</p>
-      </article>
-
-      <article class="summary-card summary-purple">
-        <div class="summary-top">
-          <span class="summary-icon">⏰</span>
-          <span class="summary-label">Next Reminder</span>
-        </div>
-        <p class="summary-number summary-time" id="nextReminder">Not set</p>
-        <p class="summary-description" id="nextMedicine">Add a medicine to begin</p>
-      </article>
-    </section>
-
-    <section class="content-grid" id="medicines">
-      <div class="panel medicine-panel">
-        <div class="panel-heading">
-          <div>
-            <span class="section-kicker">STAY ON SCHEDULE</span>
-            <h2>My Medicine Cabinet</h2>
-            <p class="panel-subtitle">Organize tablets, syrups, and other prescribed medicines.</p>
-          </div>
-          <span class="heading-icon">💊</span>
-        </div>
-
-        <button class="button button-primary add-button" id="showMedicineForm" type="button">
-          <span aria-hidden="true">＋</span> Add Medicine
-        </button>
-
-        <form id="medicineForm" class="medicine-form" hidden>
-          <input type="hidden" id="medicineId" value="">
-
-          <h3>Medicine details</h3>
-
-          <div class="form-field">
-            <label for="medicineName">Medicine name *</label>
-            <input id="medicineName" name="medicineName" type="text"
-              placeholder="Enter medicine name" required maxlength="100">
-          </div>
-
-          <div class="form-field">
-            <label for="medicineType">Medicine type</label>
-            <select id="medicineType" name="medicineType">
-              <option value="Tablet">Tablet</option>
-              <option value="Syrup">Syrup</option>
-              <option value="Capsule">Capsule</option>
-              <option value="Drops">Drops</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-
-          <div class="form-field">
-            <label for="medicineInstructions">Prescribed instructions</label>
-            <textarea id="medicineInstructions" name="medicineInstructions"
-              rows="3" maxlength="300"
-              placeholder="Enter instructions given by your healthcare professional"></textarea>
-          </div>
-
-          <div class="form-field">
-            <label for="medicineTime">Daily reminder time *</label>
-            <input id="medicineTime" name="medicineTime" type="time" required>
-          </div>
-
-          <p class="form-note">Enter medicine instructions exactly as prescribed. This app does not determine doses.</p>
-
-          <div class="form-actions">
-            <button class="button button-primary" type="submit">Save Medicine</button>
-            <button class="button button-secondary" id="cancelMedicineForm" type="button">Cancel</button>
-          </div>
-        </form>
-
-        <div id="emptyMedicines" class="empty-state">
-          <div class="empty-icon">🗓️</div>
-          <h3>Your schedule starts here</h3>
-          <p>Add a prescribed medicine to create your first reminder.</p>
-        </div>
-
-        <div id="medicineList" class="medicine-list" aria-live="polite"></div>
-      </div>
-
-      <aside class="panel routine-panel">
-        <span class="section-kicker">SMALL STEPS MATTER</span>
-        <h2>Your Daily Care Routine</h2>
-        <p class="panel-subtitle">Simple habits can help you stay organized and supported.</p>
-
-        <div class="routine-item">
-          <span class="routine-icon routine-mint">🌅</span>
-          <div>
-            <h3>Start gently</h3>
-            <p>Begin the day with your usual morning routine.</p>
-          </div>
-        </div>
-
-        <div class="routine-item">
-          <span class="routine-icon routine-peach">🥗</span>
-          <div>
-            <h3>Eat balanced meals</h3>
-            <p>Choose nourishing foods that fit your care plan.</p>
-          </div>
-        </div>
-
-        <div class="routine-item">
-          <span class="routine-icon routine-lilac">🚶</span>
-          <div>
-            <h3>Move safely</h3>
-            <p>Try comfortable movement if your clinician says it is suitable.</p>
-          </div>
-        </div>
-
-        <div class="routine-item">
-          <span class="routine-icon routine-yellow">💧</span>
-          <div>
-            <h3>Remember hydration</h3>
-            <p>Follow your clinician's fluid advice, especially if you have a fluid restriction.</p>
-          </div>
-        </div>
-
-        <div class="support-note">
-          <span aria-hidden="true">♡</span>
-          <p>It is okay to ask a family member or caregiver for help with your daily routine.</p>
-        </div>
-      </aside>
-    </section>
-
-    <section class="panel health-panel" id="health">
-      <div class="panel-heading">
-        <div>
-          <span class="section-kicker">KNOW YOUR NUMBERS</span>
-          <h2>My Health Readings</h2>
-          <p class="panel-subtitle">Record measurements to discuss with your healthcare professional.</p>
-        </div>
-        <span class="heading-icon">❤️</span>
-      </div>
-
-      <form id="healthForm" class="health-form">
-        <div class="form-field">
-          <label for="healthType">Reading type</label>
-          <select id="healthType" name="healthType" required>
-            <option value="Blood Pressure">Blood Pressure</option>
-            <option value="Blood Sugar">Blood Sugar</option>
-            <option value="Weight">Weight</option>
-            <option value="Pulse">Pulse</option>
-            <option value="Other">Other</option>
-          </select>
-        </div>
-
-        <div class="form-field">
-          <label for="healthValue">Reading and units</label>
-          <input id="healthValue" name="healthValue" type="text"
-            maxlength="100" placeholder="e.g. 120/80 mmHg" required>
-        </div>
-
-        <button class="button button-primary health-submit" type="submit">
-          + Save Reading
-        </button>
-      </form>
-
-      <div id="healthReadings" class="health-readings" aria-live="polite">
-        <p>No health readings recorded yet.</p>
-      </div>
-
-      <p class="form-note">These records are for tracking only, not diagnosis. Seek medical advice about what your readings mean for you.</p>
-    </section>
-
-    <section class="food-section" id="food">
-      <div class="food-heading">
-        <span class="section-kicker">EVERYDAY NUTRITION</span>
-        <h2>Food & Wellness Guide</h2>
-        <p>General ideas to discuss with your healthcare professional and adapt to your needs.</p>
-      </div>
-
-      <div class="food-grid">
-        <article class="food-card food-diabetes">
-          <div class="food-illustration">🥦</div>
-          <span class="food-tag">BLOOD SUGAR CARE</span>
-          <h3>Eating with Diabetes</h3>
-          <ul>
-            <li>Build balanced meals with vegetables, protein, and suitable portions of carbohydrates.</li>
-            <li>Choose high-fibre foods such as beans and whole grains when appropriate.</li>
-            <li>Limit sugary drinks and follow your individual meal plan.</li>
-          </ul>
-        </article>
-
-        <article class="food-card food-bp">
-          <div class="food-illustration">🥑</div>
-          <span class="food-tag">BLOOD PRESSURE CARE</span>
-          <h3>Eating with High BP</h3>
-          <ul>
-            <li>Choose fresh foods and reduce excess salt as advised.</li>
-            <li>Include vegetables, fruits, and other balanced foods suited to your needs.</li>
-            <li>Check with your clinician before using salt substitutes, especially if you have kidney problems or take certain medicines.</li>
-          </ul>
-        </article>
-
-        <article class="food-card food-senior">
-          <div class="food-illustration">🍲</div>
-          <span class="food-tag">HEALTHY AGEING</span>
-          <h3>Everyday Nourishment</h3>
-          <ul>
-            <li>Choose foods that are easy and safe for you to chew and swallow.</li>
-            <li>Include protein-rich foods as recommended for your needs.</li>
-            <li>Follow any personal dietary, allergy, or fluid restrictions.</li>
-          </ul>
-        </article>
-      </div>
-
-      <div class="disclaimer">
-        <span aria-hidden="true">ℹ️</span>
-        <p><strong>Remember:</strong> These are general educational suggestions, not a personalized diet or treatment plan. Your clinician or dietitian can advise you based on your conditions, medicines, and nutritional needs.</p>
-      </div>
-    </section>
-
-    <section class="care-banner">
-      <div class="care-banner-icon">💚</div>
-      <div>
-        <h2>You deserve care, comfort, and peace of mind.</h2>
-        <p>Take one step at a time, and ask for support whenever you need it.</p>
-      </div>
-    </section>
-  </main>
-
-  <footer class="footer">
-    <a class="footer-brand" href="#home">✚ CareCompanion</a>
-    <p>Made with care for everyday wellness.</p>
-    <p class="footer-note">Not a substitute for professional medical advice or emergency care.</p>
-  </footer>
-
-  <dialog id="reminderDialog" class="reminder-dialog" aria-labelledby="reminderTitle">
-    <div class="reminder-box">
-      <div class="reminder-bell">🔔</div>
-      <span class="section-kicker">YOUR HEALTH MATTERS</span>
-      <h2 id="reminderTitle">Medicine Reminder</h2>
-      <p id="reminderMessage">Please check your medicine instructions.</p>
-      <p class="reminder-note">Only mark as taken after you have actually taken the medicine.</p>
-      <div class="reminder-actions">
-        <button class="button button-primary" id="reminderTaken" type="button">I've Taken It</button>
-        <button class="button button-secondary" id="reminderSnooze" type="button">Remind Me in 5 Minutes</button>
-        <button class="button button-quiet" id="reminderDismiss" type="button">Dismiss</button>
-      </div>
+    <div class="container">
+        <header>
+            <h1>Care Companion 💙</h1>
+            <p>Your daily medicine alarm</p>
+        </header>
+        
+        <main>
+            <div class="add-medicine">
+                <input type="text" id="medName" placeholder="Medicine Name (e.g., Vitamin C)">
+                <input type="date" id="medDate">
+                <input type="time" id="medTime">
+                <button onclick="addMedicine()">Set Alarm</button>
+            </div>
+            
+            <ul id="medicineList" class="medicine-list">
+                <!-- Reminders will appear here -->
+            </ul>
+        </main>
     </div>
-  </dialog>
+
+    <!-- Alarm Popup (Hidden by default) -->
+    <div id="alarmPopup" class="popup-overlay hidden">
+        <div class="popup-content">
+            <h2>⏰ Time for your medicine!</h2>
+            <p id="popupMedName" class="highlight-med">Medicine Name</p>
+            <div class="popup-buttons">
+                <button class="stop-btn" onclick="stopAlarm()">Stop Alarm</button>
+                <button class="snooze-btn" onclick="snoozeAlarm()">Snooze (5 mins)</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
 </body>
 </html>
