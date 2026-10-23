@@ -7,21 +7,40 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Hidden audio element for the alarm sound -->
     <audio id="alarmSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" loop></audio>
 
     <div class="container">
         <header>
             <h1>Care Companion 💙</h1>
-            <p>Your daily medicine alarm</p>
+            <p>Your daily medicine & health alarm</p>
         </header>
+
+        <!-- Profile Selector -->
+        <div class="profile-tabs">
+            <button class="tab-btn active" onclick="setProfile('Person 1', this)">👨 Person 1 (Husband)</button>
+            <button class="tab-btn" onclick="setProfile('Person 2', this)">👩 Person 2 (Wife)</button>
+        </div>
         
         <main>
             <div class="add-medicine">
-                <input type="text" id="medName" placeholder="Medicine Name (e.g., Vitamin C)">
-                <input type="date" id="medDate">
-                <input type="time" id="medTime">
-                <button onclick="addMedicine()">Set Alarm</button>
+                <input type="text" id="medName" placeholder="Name (e.g., BP Tablet)">
+                
+                <div class="row-inputs">
+                    <select id="medType">
+                        <option value="Tablet 💊">Tablet 💊</option>
+                        <option value="Syrup 🥄">Syrup 🥄</option>
+                        <option value="Injection 💉">Injection 💉</option>
+                        <option value="Checkup 🩺">Checkup / BP 🩺</option>
+                    </select>
+                    <input type="text" id="medInfo" placeholder="Details (e.g., After Food)">
+                </div>
+
+                <div class="row-inputs">
+                    <input type="date" id="medDate">
+                    <input type="time" id="medTime">
+                </div>
+                
+                <button class="add-btn" onclick="addMedicine()">Save Reminder</button>
             </div>
             
             <ul id="medicineList" class="medicine-list">
@@ -30,13 +49,15 @@
         </main>
     </div>
 
-    <!-- Alarm Popup (Hidden by default) -->
+    <!-- Alarm Popup -->
     <div id="alarmPopup" class="popup-overlay hidden">
         <div class="popup-content">
-            <h2>⏰ Time for your medicine!</h2>
+            <h2>⏰ Time for Medicine!</h2>
+            <p id="popupUser" class="highlight-user">For: Person</p>
             <p id="popupMedName" class="highlight-med">Medicine Name</p>
+            <p id="popupMedInfo">Instructions</p>
             <div class="popup-buttons">
-                <button class="stop-btn" onclick="stopAlarm()">Stop Alarm</button>
+                <button class="stop-btn" onclick="stopAlarm()">Stop Alarm & Mark Taken</button>
                 <button class="snooze-btn" onclick="snoozeAlarm()">Snooze (5 mins)</button>
             </div>
         </div>
