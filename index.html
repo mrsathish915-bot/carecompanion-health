@@ -1,68 +1,219 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Care Companion</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#087f8c">
+  <title>CareCompanion | Family Health Assistant</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
 </head>
 <body>
-    <audio id="alarmSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" loop></audio>
+  <header class="topbar">
+    <a class="brand" href="#">
+      <span class="brand-icon">✚</span>
+      <span>Care<span class="brand-light">Companion</span>
+        <small>Family Health Assistant</small>
+      </span>
+    </a>
+    <button id="enableSound" class="sound-button">🔔 Enable Alarm Sound</button>
+  </header>
 
-    <div class="container">
-        <header>
-            <h1>Care Companion 💙</h1>
-            <p>Your daily medicine & health alarm</p>
-        </header>
+  <main class="container">
+    <section class="welcome">
+      <div>
+        <p class="eyebrow">YOUR FAMILY, YOUR CARE</p>
+        <h1>Health care made <span>simpler.</span></h1>
+        <p>Manage family medicines, reminders and health readings in one place.</p>
+      </div>
+      <div class="welcome-icon">♡</div>
+    </section>
 
-        <!-- Profile Selector -->
-        <div class="profile-tabs">
-            <button class="tab-btn active" onclick="setProfile('Person 1', this)">👨 Person 1 (Husband)</button>
-            <button class="tab-btn" onclick="setProfile('Person 2', this)">👩 Person 2 (Wife)</button>
+    <section class="section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">PERSONAL CARE</p>
+          <h2>Family profiles</h2>
         </div>
-        
-        <main>
-            <div class="add-medicine">
-                <input type="text" id="medName" placeholder="Name (e.g., BP Tablet)">
-                
-                <div class="row-inputs">
-                    <select id="medType">
-                        <option value="Tablet 💊">Tablet 💊</option>
-                        <option value="Syrup 🥄">Syrup 🥄</option>
-                        <option value="Injection 💉">Injection 💉</option>
-                        <option value="Checkup 🩺">Checkup / BP 🩺</option>
-                    </select>
-                    <input type="text" id="medInfo" placeholder="Details (e.g., After Food)">
-                </div>
+      </div>
 
-                <div class="row-inputs">
-                    <input type="date" id="medDate">
-                    <input type="time" id="medTime">
-                </div>
-                
-                <button class="add-btn" onclick="addMedicine()">Save Reminder</button>
-            </div>
-            
-            <ul id="medicineList" class="medicine-list">
-                <!-- Reminders will appear here -->
-            </ul>
-        </main>
-    </div>
-
-    <!-- Alarm Popup -->
-    <div id="alarmPopup" class="popup-overlay hidden">
-        <div class="popup-content">
-            <h2>⏰ Time for Medicine!</h2>
-            <p id="popupUser" class="highlight-user">For: Person</p>
-            <p id="popupMedName" class="highlight-med">Medicine Name</p>
-            <p id="popupMedInfo">Instructions</p>
-            <div class="popup-buttons">
-                <button class="stop-btn" onclick="stopAlarm()">Stop Alarm & Mark Taken</button>
-                <button class="snooze-btn" onclick="snoozeAlarm()">Snooze (5 mins)</button>
-            </div>
+      <form id="profileForm" class="form-card">
+        <div class="form-grid">
+          <label>Person's name
+            <input id="profileName" required maxlength="60"
+              placeholder="Enter any person's name">
+          </label>
+          <label>Age (optional)
+            <input id="profileAge" type="number" min="1" max="120"
+              placeholder="Age">
+          </label>
+          <label>Relationship (optional)
+            <select id="profileRelation">
+              <option value="Self">Self</option>
+              <option value="Mother">Mother</option>
+              <option value="Father">Father</option>
+              <option value="Husband">Husband</option>
+              <option value="Wife">Wife</option>
+              <option value="Sister">Sister</option>
+              <option value="Brother">Brother</option>
+              <option value="Grandparent">Grandparent</option>
+              <option value="Child">Child</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
         </div>
-    </div>
+        <button class="primary-button" type="submit">＋ Add Family Member</button>
+      </form>
 
-    <script src="script.js"></script>
+      <div id="profileList" class="profile-list"></div>
+      <p class="hint">Select a profile to view that person's medicines and readings.</p>
+    </section>
+
+    <section class="stats-grid">
+      <article class="stat-card">
+        <span class="stat-icon">💊</span>
+        <p>Medicines</p>
+        <strong id="totalMedicines">0</strong>
+      </article>
+      <article class="stat-card">
+        <span class="stat-icon">⏰</span>
+        <p>Today's reminders</p>
+        <strong id="pendingMedicines">0</strong>
+      </article>
+      <article class="stat-card">
+        <span class="stat-icon">✓</span>
+        <p>Doses taken today</p>
+        <strong id="takenMedicines">0</strong>
+      </article>
+    </section>
+
+    <section class="section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">MEDICATION PLAN</p>
+          <h2>Medicine schedule</h2>
+          <p id="selectedPerson" class="subheading">Select or add a family member.</p>
+        </div>
+      </div>
+
+      <form id="medicineForm" class="form-card" hidden>
+        <h3 id="medicineFormTitle">Add a medicine</h3>
+        <input id="medicineId" type="hidden">
+        <div class="form-grid">
+          <label>Medicine name
+            <input id="medicineName" required maxlength="100"
+              placeholder="Enter prescribed medicine name">
+          </label>
+          <label>Type
+            <select id="medicineType">
+              <option>Tablet</option>
+              <option>Capsule</option>
+              <option>Syrup</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label>Reminder time
+            <input id="medicineTime" type="time" required>
+          </label>
+          <label>Instructions (optional)
+            <input id="medicineInstructions" maxlength="200"
+              placeholder="As directed by clinician">
+          </label>
+        </div>
+        <div class="button-row">
+          <button class="primary-button" type="submit">Save Medicine</button>
+          <button class="secondary-button" id="cancelMedicine" type="button">Cancel</button>
+        </div>
+      </form>
+
+      <div class="section-actions">
+        <span class="hint">Add medicines according to the person's prescribed plan.</span>
+        <button class="primary-button" id="showMedicineForm" type="button">
+          ＋ Add Medicine
+        </button>
+      </div>
+      <div id="medicineList" class="medicine-list"></div>
+      <p id="emptyMedicines" class="empty-state">
+        No medicines added yet. Add a medicine to create a reminder.
+      </p>
+    </section>
+
+    <section class="section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">WELLNESS TRACKER</p>
+          <h2>Health readings</h2>
+        </div>
+      </div>
+      <form id="healthForm" class="form-card">
+        <div class="form-grid">
+          <label>Reading type
+            <select id="healthType">
+              <option value="Blood Pressure">Blood Pressure</option>
+              <option value="Blood Sugar">Blood Sugar</option>
+              <option value="Weight">Weight</option>
+              <option value="Temperature">Temperature</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+          <label>Value
+            <input id="healthValue" required maxlength="50"
+              placeholder="Enter a measured value">
+          </label>
+        </div>
+        <button class="primary-button" type="submit">Save Reading</button>
+      </form>
+      <div id="healthReadings" class="reading-list"></div>
+    </section>
+
+    <section class="info-card">
+      <h2>🌿 Everyday wellness</h2>
+      <div class="wellness-grid">
+        <p>💧 <strong>Stay hydrated</strong><br>Drink fluids as advised for individual health needs.</p>
+        <p>🥗 <strong>Balanced meals</strong><br>Follow dietary guidance suitable for your health needs.</p>
+        <p>🚶 <strong>Gentle activity</strong><br>Choose safe movement suited to your abilities.</p>
+        <p>🩺 <strong>Keep records</strong><br>Share health readings with your healthcare professional.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">DAILY RECORD</p>
+          <h2>Recent dose history</h2>
+        </div>
+      </div>
+      <div id="doseHistory" class="reading-list"></div>
+    </section>
+
+    <footer>
+      <p>CareCompanion · A family health tracking prototype</p>
+      <p>Follow prescriptions and clinician advice. This app does not replace medical care.</p>
+    </footer>
+  </main>
+
+  <dialog id="reminderDialog" aria-labelledby="reminderTitle">
+    <div class="alarm-content">
+      <div class="alarm-icon">🔔</div>
+      <p class="eyebrow">MEDICINE REMINDER</p>
+      <h2 id="reminderTitle">It's time for a reminder</h2>
+      <p id="reminderMessage"></p>
+      <p class="alarm-note">The alarm will continue until you choose an action.</p>
+      <div class="alarm-buttons">
+        <button id="snoozeAlarm" class="secondary-button" type="button">
+          ⏰ Snooze 5 min
+        </button>
+        <button id="stopAlarm" class="primary-button" type="button">
+          ■ Stop Alarm
+        </button>
+        <button id="takenAlarm" class="taken-button" type="button">
+          ✓ Mark Taken
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="statusMessage" class="status-message" role="status" aria-live="polite"></div>
 </body>
 </html>
